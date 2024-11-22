@@ -4,15 +4,18 @@
 #include <mysql_connection.h>
 #include <cppconn/prepared_statement.h>
 #include <cppconn/resultset.h>
+#include <sqlite3.h>
+#include <memory>
 #include "Student.h"
 
 class UserRepository {
 private:
-    sql::mysql::MySQL_Driver* driver;
-    std::unique_ptr<sql::Connection> connection;
+    sqlite3* connection; // Pointer Sqlite database
 
 public:
-    UserRepository(const std::string& host, const std::string& user, const std::string& password, const std::string& database);
+    UserRepository(const std::string& database);
+
+    ~UserRepository();
 
     void addUser(int id, const std::string& name);
 

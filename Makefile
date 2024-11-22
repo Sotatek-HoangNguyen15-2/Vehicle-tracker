@@ -1,6 +1,6 @@
 # Project name and source file
 PROJECT_NAME = DatabaseExample
-SRC = main.cpp DataBase.cpp Student.cpp
+SRC = main.cpp DataBase.cpp
 # Path to mySQL library
 MYSQL_INCLUDE = /usr/include/cppconn
 MYSQL_LIB = /usr/lib/x86_64-linux-gnu
@@ -9,19 +9,18 @@ MYSQL_LIB = /usr/lib/x86_64-linux-gnu
 CXX = g++
 CXXFLAGS = -std=c++14 -Wall -I$(MYSQL_INCLUDE)
 
-# Liên kết với thư viện MySQL
-LDFLAGS = -L$(MYSQL_LIB) -lmysqlcppconn
+# Link to Sqlite library
+LDFLAGS = -L$(MYSQL_LIB) -lsqlite3
 
-# Tên file thực thi
+# Name execute file
 TARGET = $(PROJECT_NAME)
 
-# Quy trình biên dịch
 all: $(TARGET)
 
 $(TARGET): $(SRC)
 	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET) $(LDFLAGS)
 
-# Clean: Xóa file biên dịch và file thực thi
+# Clean: Delete compiler file and execute file
 clean:
 	rm -f $(TARGET)
 

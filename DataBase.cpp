@@ -1,90 +1,124 @@
 #include "DataBase.h"
 
-UserRepository :: UserRepository(const std::string& host, const std::string& user, const std::string& password, const std::string& database)
+UserRepository::UserRepository(const std::string& database)
 {
-    driver = sql::mysql::get_mysql_driver_instance();
-    connection.reset(driver->connect(host, user, password));
-    connection->setSchema(database);
-}
-
- Student UserRepository :: findOneById(int id)
- {
-    std::unique_ptr<sql::PreparedStatement> stmt(
-    connection->prepareStatement("SELECT id, name FROM users WHERE id = ?"));
-    stmt->setInt(1, id);
-    std::unique_ptr<sql::ResultSet> res(stmt->executeQuery());
-
-    if (res->next()) 
-    {
-        int userId = res->getInt("id");
-        std::string userName = res->getString("name");
-        return Student(userId, userName);
+    if (sqlite3_open(database.c_str(), &connection) != SQLITE_OK) {
+        throw std::runtime_error("Cannot open database: " + std::string(sqlite3_errmsg(connection)));
     }
 
-    return Student(-1, ""); // Not found
-}
-
-void UserRepository :: deleteById(int id) 
-{
-    std::unique_ptr<sql::PreparedStatement> stmt(connection->prepareStatement("DELETE FROM users WHERE id = ?"));
-    stmt->setInt(1, id);
-    stmt->execute();
-}
-
-void UserRepository :: readUsers()
-{
-    try 
-    {
-        // Create query SQL
-        std::unique_ptr<sql::Statement> stmt(connection->createStatement());
-        std::unique_ptr<sql::ResultSet> res(stmt->executeQuery("SELECT id, name FROM users"));
-
-        // Browse through the query results and show the data
-        while (res->next()) 
-        {
-            int id = res->getInt("id");
-            std::string name = res->getString("name");
-                
-            std::cout << "ID: " << id << ", Name: " << name << std::endl;
-        }
-    } 
-    catch (sql::SQLException& e) 
-    {
-        std::cerr << "Error reading users: " << e.what() << std::endl;
-    }
-}
-
-void UserRepository::addUser(int id, const std::string& name) 
-{
-    try {
-        std::unique_ptr<sql::PreparedStatement> stmt(
-            connection->prepareStatement("INSERT INTO users (id, name) VALUES (?, ?)")
+    // SQL to create a table if it does not already exist
+    const char* createTableSQL = R"(
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL
         );
-        stmt->setInt(1, id);
-        stmt->setString(2, name);
-        stmt->execute();
-        std::cout << "Student added: ID = " << id << ", Name = " << name << std::endl;
-    } catch (sql::SQLException& e) {
-        std::cerr << "Error adding user: " << e.what() << std::endl;
+    )";
+
+    char* errorMessage = nullptr;
+    if (sqlite3_exec(connection, createTableSQL, nullptr, nullptr, &errorMessage) != SQLITE_OK) {
+        std::string error = "Failed to create table: " + std::string(errorMessage);
+        sqlite3_free(errorMessage); // free memmory for error
+        throw std::runtime_error(error);
     }
+}
+
+UserRepository::~UserRepository()
+{
+    sqlite3_close(connection);
+}
+
+Student UserRepository::findOneById(int id)
+{
+    const char* sql = "SELECT id, name FROM users WHERE id = ?";
+    sqlite3_stmt* stmt;
+
+    if (sqlite3_prepare_v2(connection, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        throw std::runtime_error("Failed to prepare statement: " + std::string(sqlite3_errmsg(connection)));
+    }
+
+    sqlite3_bind_int(stmt, 1, id);
+
+    Student student(-1, ""); // Not found
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        int userId = sqlite3_column_int(stmt, 0);
+        std::string userName(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)));
+        student = Student(userId, userName);
+    }
+
+    sqlite3_finalize(stmt);
+    return student;
+}
+
+void UserRepository::deleteById(int id)
+{
+    const char* sql = "DELETE FROM users WHERE id = ?";
+    sqlite3_stmt* stmt;
+
+    if (sqlite3_prepare_v2(connection, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        throw std::runtime_error("Failed to prepare statement: " + std::string(sqlite3_errmsg(connection)));
+    }
+
+    sqlite3_bind_int(stmt, 1, id);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+}
+
+void UserRepository::readUsers()
+{
+    const char* sql = "SELECT id, name FROM users";
+    sqlite3_stmt* stmt;
+
+    if (sqlite3_prepare_v2(connection, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        throw std::runtime_error("Failed to prepare statement: " + std::string(sqlite3_errmsg(connection)));
+    }
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        int id = sqlite3_column_int(stmt, 0);
+        std::string name(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)));
+        std::cout << "ID: " << id << ", Name: " << name << std::endl;
+    }
+
+    sqlite3_finalize(stmt);
+}
+
+void UserRepository::addUser(int id, const std::string& name)
+{
+    const char* sql = "INSERT INTO users (id, name) VALUES (?, ?)";
+    sqlite3_stmt* stmt;
+
+    if (sqlite3_prepare_v2(connection, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        throw std::runtime_error("Failed to prepare statement: " + std::string(sqlite3_errmsg(connection)));
+    }
+
+    sqlite3_bind_int(stmt, 1, id);
+    sqlite3_bind_text(stmt, 2, name.c_str(), -1, SQLITE_STATIC);
+
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        throw std::runtime_error("Failed to execute statement: " + std::string(sqlite3_errmsg(connection)));
+    }
+
+    sqlite3_finalize(stmt);
+    std::cout << "User added: ID = " << id << ", Name = " << name << std::endl;
 }
 
 void UserRepository::updateUser(int id, const std::string& newName)
 {
-    try {
-        std::unique_ptr<sql::PreparedStatement> stmt(
-            connection->prepareStatement("UPDATE users SET name = ? WHERE id = ?")
-        );
-        stmt->setString(1, newName); // Giá trị mới cho cột 'name'
-        stmt->setInt(2, id);         // Điều kiện cập nhật (id)
+    const char* sql = "UPDATE users SET name = ? WHERE id = ?";
+    sqlite3_stmt* stmt;
 
-        int rowsAffected = stmt->executeUpdate();
-        if (rowsAffected > 0) {
-            std::cout << "Student updated: ID = " << id << ", New Name = " << newName << std::endl;
-        } else {
-            std::cout << "No user found with ID = " << id << std::endl;
-        }
-    } catch (sql::SQLException& e) {
-        std::cerr << "Error updating user: " << e.what() << std::endl;
+    if (sqlite3_prepare_v2(connection, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        throw std::runtime_error("Failed to prepare statement: " + std::string(sqlite3_errmsg(connection)));
     }
+
+    sqlite3_bind_text(stmt, 1, newName.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 2, id);
+
+    int rowsAffected = sqlite3_step(stmt);
+    if (rowsAffected == SQLITE_DONE) {
+        std::cout << "Student updated: ID = " << id << ", New Name = " << newName << std::endl;
+    } else {
+        std::cout << "No user found with ID = " << id << std::endl;
+    }
+
+    sqlite3_finalize(stmt);
 }

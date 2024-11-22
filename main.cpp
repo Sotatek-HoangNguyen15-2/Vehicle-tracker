@@ -4,33 +4,31 @@
 
 int main() {
     try {
-        UserRepository repo("tcp://127.0.0.1:3306", "root", "1", "test_db");
+        // Initialize UserRepository SQLite, use path file database
+        UserRepository repo("test_db.sqlite");
 
-        // // Save a new user
-        // Student user1(1, "John Doe");
-        // repo.save(user1);
+        repo.updateUser(2, "Hoang Tran");
 
-        // // Find a user by ID
-        // Student user = repo.findOneById(1);
-        // if (user.id != -1) {
-        //     std::cout << "Found user: " << user.id << ", " << user.name << std::endl;
-        // } else {
-        //     std::cout << "Student not found." << std::endl;
-        // }
-        // repo.addUser(2, "Viet Hoang");
-
-        // repo.readUsers();
-
-        // repo.updateUser(2, "Viet");
+        // Perform users
+        std::cout << "\nUsers list:" << std::endl;
         repo.readUsers();
 
-        // Delete a user
-        // repo.deleteById(1);
-        // std::cout << "Student deleted." << std::endl;
+        // Find user by ID
+        Student user = repo.findOneById(1);
+        if (user.id != -1) {
+            std::cout << "\nFounded user: ID = " << user.id << ", Name = " << user.name << std::endl;
+        } else {
+            std::cout << "\nNot founded user ID = 1." << std::endl;
+        }
+
+        repo.deleteById(1);
+        std::cout << "\nUser ID = 1 was deleted." << std::endl;
+
+        repo.readUsers();
     } 
-    catch (sql::SQLException& e) 
+    catch (const std::exception& e) 
     {
-        std::cerr << "SQLException: " << e.what() << std::endl;
+        std::cerr << "Exception: " << e.what() << std::endl;
         return 1;
     }
 
