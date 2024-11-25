@@ -1,4 +1,5 @@
 #include "DataBase.h"
+#include <iostream>
 
 UserRepository::UserRepository(const std::string& database)
 {
